@@ -19,14 +19,15 @@ PRES = 8
 PA, PB, PC = 1.0, 0.4, 0.25
 CYCLE = 14.0
 W, H = 900, 900
-WAMP = 3.5      # 波浪振幅
+WAMP = 9.0      # 波浪振幅（加大）
 WFREQ = 1.4     # 波浪频率
 SWR = 6.0       # 散射 / 扭曲
 SPIN = 1.5      # 旋转速度
+RUN_SECONDS = 15  # 自动运行时长
 # =========================================================
 
-N_GALAXY = 26000   # 星系粒子数
-N_BRIGHT = 90      # 点缀的亮星数（带十字光芒）
+N_GALAXY = 78000   # 星系粒子数（x3）
+N_BRIGHT = 120     # 点缀的亮星数（带十字光芒）
 
 
 def build_particles():
@@ -42,8 +43,8 @@ def build_particles():
     angle = base_angle + twist + np.random.normal(0.0, 0.28, n)
     x = r * np.cos(angle)
     y = r * np.sin(angle)
-    # z 方向厚度：中心厚、外围薄
-    z = np.random.normal(0.0, 0.35 * np.exp(-r * 0.55), n)
+    # z 方向厚度：中心厚、外围薄（加大厚度增强层次感）
+    z = np.random.normal(0.0, 0.7 * np.exp(-r * 0.45) + 0.15, n)
     # 颜色：中心白亮 -> 外围蓝
     t = np.clip(r / 4.2, 0.0, 1.0)
     # 中心偏暖白，外围偏冷蓝
@@ -97,15 +98,18 @@ void main() {
     // 整体绕 z 轴旋转
     float ang = u_time * 0.15 * u_spin;
     p = (rotZ(ang) * vec4(p, 1.0)).xyz;
-    // 波浪扰动：沿半径方向的起伏
-    float w = sin(length(p.xy) * u_wfreq - u_time * 1.2) * u_wamp * 0.08;
-    p.z += w;
+    // 多层波浪扰动：叠加三层不同频率，增强层次感
+    float rad = length(p.xy);
+    float w1 = sin(rad * u_wfreq - u_time * 1.2) * u_wamp * 0.12;
+    float w2 = sin(rad * u_wfreq * 2.3 + u_time * 0.8) * u_wamp * 0.05;
+    float w3 = cos(rad * u_wfreq * 0.6 - u_time * 0.5) * u_wamp * 0.08;
+    p.z += w1 + w2 + w3;
     // 轻微径向呼吸
     float breathe = 1.0 + 0.03 * sin(u_time * 0.6);
     p.xy *= breathe;
     // 散射扰动：加一点随机相位的摆动
-    p.x += sin(u_time * 0.7 + p.y * u_swr * 0.15) * 0.03;
-    p.y += cos(u_time * 0.6 + p.x * u_swr * 0.15) * 0.03;
+    p.x += sin(u_time * 0.7 + p.y * u_swr * 0.15) * 0.04;
+    p.y += cos(u_time * 0.6 + p.x * u_swr * 0.15) * 0.04;
     gl_Position = u_proj * vec4(p, 1.0);
     gl_PointSize = in_size;
     v_col = in_col;
@@ -229,6 +233,10 @@ def main():
 
     while not glfw.window_should_close(window):
         t = clock() - t0
+
+        # 15 秒自动退出
+        if t >= RUN_SECONDS:
+            break
 
         # 半透明清屏：制造拖尾感
         # 用一个全屏矩形画半透明深色，覆盖上一帧
